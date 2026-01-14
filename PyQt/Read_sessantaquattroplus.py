@@ -13,6 +13,7 @@ class Config:
     UPDATE_RATE = 16  # milliseconds (~60 FPS)
     PLOT_HEIGHT = 600  # pixels
     WINDOW_SIZE = (1200, 800)  # width, height
+    LABEL_SHIFT_STEP_RATIO = 0.2  # relative to track offset
 
 
 class Track:
@@ -23,6 +24,7 @@ class Track:
         self.offset = offset
         self.conv_fact = conv_fact
         self.plot_time = plot_time
+        self.label_offset = 0.0
 
         # (チャンネル数, 表示する時間幅 × サンプリング点数)
         self.buffer = np.zeros((num_channels, int(plot_time * frequency)))
@@ -83,7 +85,7 @@ class Track:
                 label = pg.TextItem(text=str(i + 1), anchor=(0, 0.5), color=(200, 200, 200))
                 label.setZValue(10)
                 self.plot_widget.addItem(label)
-                label.setPos(0, self.offset * i)
+                label.setPos(0, self.offset * i + self.label_offset)
                 self.channel_labels.append(label)
         
     def feed(self, packet):
@@ -107,6 +109,13 @@ class Track:
                 self.buffer[index, :] * self.conv_fact + (self.offset * index),
             )
             # setData()の引数はx配列とy配列
+
+    def shift_label_positions(self, delta):
+        if not self.channel_labels:
+            return
+        self.label_offset += delta
+        for i, label in enumerate(self.channel_labels):
+            label.setPos(0, self.offset * i + self.label_offset)
 
 
 class DataReceiverThread(QtCore.QThread):
@@ -190,6 +199,7 @@ class Soundtrack(QtWidgets.QWidget):
         self.tracks = []
         self.plot_time = Config.DEFAULT_PLOT_TIME
         self.is_paused = False
+        self.emg_track = None
 
         self.setWindowTitle("Sessantaquattro+ Data Visualization")
         self.setGeometry(100, 100, *Config.WINDOW_SIZE)
@@ -221,6 +231,19 @@ class Soundtrack(QtWidgets.QWidget):
         self.status_label = QtWidgets.QLabel("Ready")
         self.menu_layout.addWidget(self.status_label)
 
+        # Add EMG label shift buttons
+        self.label_shift_down_button = QtWidgets.QPushButton("Label -")
+        self.label_shift_down_button.clicked.connect(
+            lambda: self.shift_emg_labels(-1)
+        )
+        self.menu_layout.addWidget(self.label_shift_down_button)
+
+        self.label_shift_up_button = QtWidgets.QPushButton("Label +")
+        self.label_shift_up_button.clicked.connect(
+            lambda: self.shift_emg_labels(1)
+        )
+        self.menu_layout.addWidget(self.label_shift_up_button)
+
         # Add stretch to push widgets to the left
         self.menu_layout.addStretch()
 
@@ -246,6 +269,7 @@ class Soundtrack(QtWidgets.QWidget):
         self.scroll_area.setWidget(self.scroll_widget)
 
         self.init_tracks()
+        self._set_label_buttons_enabled(self.emg_track is not None)
 
         # Timer for plot updates
         self.timer = QtCore.QTimer()
@@ -306,8 +330,15 @@ class Soundtrack(QtWidgets.QWidget):
             # Add track container to scroll layout
             self.scroll_layout.addWidget(track_container)
 
+            if "HDsEMG" in title:
+                self.emg_track = track
+
         # Add stretch at the end to prevent unwanted spacing
         self.scroll_layout.addStretch()
+
+    def _set_label_buttons_enabled(self, enabled):
+        self.label_shift_down_button.setEnabled(enabled)
+        self.label_shift_up_button.setEnabled(enabled)
 
     def change_plot_time(self, time_str):
         # Convert string time to seconds
@@ -347,6 +378,12 @@ class Soundtrack(QtWidgets.QWidget):
         else:
             self.timer.start(Config.UPDATE_RATE)
             print("Visualization resumed")
+
+    def shift_emg_labels(self, direction):
+        if self.emg_track is None:
+            return
+        step = self.emg_track.offset * Config.LABEL_SHIFT_STEP_RATIO
+        self.emg_track.shift_label_positions(direction * step)
 
     def update_status(self, message):
         self.status_label.setText(message)
