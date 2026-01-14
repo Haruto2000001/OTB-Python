@@ -76,6 +76,16 @@ class Track:
             curve = self.plot_widget.plot(pen=pen, name=curve_name)
             self.curves.append(curve)
 
+        
+        self.channel_labels = []
+        if "HDsEMG" in title:
+            for i in range(num_channels):
+                label = pg.TextItem(text=str(i + 1), anchor=(0, 0.5), color=(200, 200, 200))
+                label.setZValue(10)
+                self.plot_widget.addItem(label)
+                label.setPos(0, self.offset * i)
+                self.channel_labels.append(label)
+        
     def feed(self, packet):
         packet_size = packet.shape[1]
         # Use buffer management
@@ -96,6 +106,7 @@ class Track:
                 self.time_array,
                 self.buffer[index, :] * self.conv_fact + (self.offset * index),
             )
+            # setData()の引数はx配列とy配列
 
 
 class DataReceiverThread(QtCore.QThread):
@@ -160,6 +171,12 @@ class DataReceiverThread(QtCore.QThread):
     def stop(self):
         print("Stopping data receiver thread")
         self.running = False
+        try:
+            if self.client_socket:
+                print("Shutdown Socket")
+                self.client_socket.shutdown(socket.SHUT_RDWR)
+        except OSError:
+            pass
 
 
 class Soundtrack(QtWidgets.QWidget):
@@ -344,6 +361,7 @@ class Soundtrack(QtWidgets.QWidget):
         self.receiver_thread.stop()
         self.receiver_thread.wait()
         self.client_socket.close()
+        self.device.stop_server()
         event.accept()
 
 
