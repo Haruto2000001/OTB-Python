@@ -118,14 +118,18 @@ class DataReceiverThread(QtCore.QThread):
                 data = self.client_socket.recv(
                     self.device.nchannels * 2 * (self.device.frequency // 16)
                 )
+                # 一度に送られてくるパケットは、チャンネル数 × 2 バイト(int16) × 1/16 秒分のサンプル数
+    
                 if not data:
                     print("No data received, connection may be closed")
                     break
 
                 unpacked_data = struct.unpack(f">{len(data) // 2}h", data)
+                # unpacked_data.length = 72 * (2000 // 16) = 9000
                 reshaped_data = (
                     np.array(unpacked_data).reshape((-1, self.device.nchannels)).T
                 )
+                # reshaped_data.shape = (num_channels: 72, num_samples: 125)
 
                 channel_index = 0
                 for track in self.tracks:
@@ -137,7 +141,8 @@ class DataReceiverThread(QtCore.QThread):
                     channel_index += track.num_channels
 
                 self.data_received.emit(reshaped_data)
-
+                # self.data_received(シグナル)に対して通知(emit) 今は使われていない
+                
                 # Calculate FPS every 100 packets
                 self.packet_count += 1
                 if self.packet_count % 100 == 0:
@@ -146,6 +151,7 @@ class DataReceiverThread(QtCore.QThread):
                     self.fps = 100 / elapsed if elapsed > 0 else 0
                     self.last_time = current_time
                     self.status_update.emit(f"Data rate: {self.fps:.1f} packets/second")
+                    # SoundTrackでself.receiver_thread.status_update.connect(self.update_status)
 
             except Exception as e:
                 print(f"Error receiving data: {e}")
@@ -157,6 +163,9 @@ class DataReceiverThread(QtCore.QThread):
 
 
 class Soundtrack(QtWidgets.QWidget):
+    """_summary_
+    Trackをまとめて管理するクラス
+    """
     def __init__(self, device, client_socket):
         super().__init__()
         self.device = device
@@ -389,6 +398,10 @@ class SessantaquattroPlus:
         return Command
 
     def start_server(self):
+        """
+        デバイスとTCP接続を始める関数
+        commandを送ることでパラメータを設定している
+        """
         command = self.create_command()
         try:
             self.server_socket = socket.socket(socket.AF_INET, socket.SOCK_STREAM)
