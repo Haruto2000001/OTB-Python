@@ -8,12 +8,14 @@ import struct
 import numpy as np
 
 
-class Config:
-    DEFAULT_PLOT_TIME = 1  # seconds
-    UPDATE_RATE = 16  # milliseconds (~60 FPS)
-    PLOT_HEIGHT = 600  # pixels
-    WINDOW_SIZE = (1200, 800)  # width, height
-    LABEL_SHIFT_STEP_RATIO = 0.2  # relative to track offset
+class Config:   
+    DEFAULT_PLOT_TIME = 1           # seconds
+    UPDATE_RATE = 16                # milliseconds (~60 FPS)
+    PLOT_HEIGHT = 600               # pixels
+    WINDOW_SIZE = (1200, 800)       # width, height
+    LABEL_SHIFT_STEP_RATIO = 0.2    # relative to track offset
+    HEATMAP_ROWS = 13               # heatmap rows
+    HEATMAP_COLS = 5                # heatmap cols
 
 
 class Track:
@@ -250,6 +252,18 @@ class Soundtrack(QtWidgets.QWidget):
         # Add menu widget to main layout
         self.main_layout.addWidget(self.menu_widget)
 
+        # EMG heatmap
+        self.heatmap_plot = pg.PlotWidget(title="EMG RMS Heatmap")
+        self.heatmap_plot.setMinimumHeight(240)
+        self.heatmap_plot.setMouseEnabled(x=False, y=False)
+        self.heatmap_plot.hideAxis("bottom")
+        self.heatmap_plot.hideAxis("left")
+        self.heatmap_plot.setAspectLocked(True)
+        self.heatmap_plot.getViewBox().invertY(True)
+        self.heatmap_item = pg.ImageItem()
+        self.heatmap_plot.addItem(self.heatmap_item)
+        self.main_layout.addWidget(self.heatmap_plot)
+
         # Create scroll area
         self.scroll_area = QtWidgets.QScrollArea()
         self.scroll_area.setWidgetResizable(True)
@@ -270,6 +284,7 @@ class Soundtrack(QtWidgets.QWidget):
 
         self.init_tracks()
         self._set_label_buttons_enabled(self.emg_track is not None)
+        self.heatmap_plot.setVisible(self.emg_track is not None)
 
         # Timer for plot updates
         self.timer = QtCore.QTimer()
@@ -388,10 +403,36 @@ class Soundtrack(QtWidgets.QWidget):
     def update_status(self, message):
         self.status_label.setText(message)
 
+    def update_heatmap(self):
+        if self.emg_track is None:
+            return
+
+        rows = Config.HEATMAP_ROWS
+        cols = Config.HEATMAP_COLS
+        heatmap = np.zeros((rows, cols), dtype=float)
+
+        rms = np.sqrt(
+            np.mean((self.emg_track.buffer * self.emg_track.conv_fact) ** 2, axis=1)
+        )
+        
+        mep_max = np.array(self.emg_track.buffer).max(axis=1)
+
+        max_cells = rows * cols - 1 
+        count = min(len(rms), max_cells)
+        for i in range(count):
+            idx = i + 1  # keep (0, 0) at 0
+            row = idx // rows
+            col = idx % rows
+
+            heatmap[row, col] = mep_max[i]
+
+        self.heatmap_item.setImage(heatmap, autoLevels=True)
+
     def update_plot(self):
         if not self.is_paused:
             for track in self.tracks:
                 track.draw()
+            self.update_heatmap()
 
     def closeEvent(self, event):
         print("Closing application")
@@ -487,15 +528,15 @@ def main():
     device = SessantaquattroPlus()
 
     # Configure device with specific parameters
-    FSAMP = 0  # 2000 Hz
-    NCH = 0  # 64 channels
-    MODE = 0  # Standard mode
-    HRES = 0  # Normal resolution
-    HPF = 0  # High-pass filter enabled
-    EXTEN = 0  # External trigger disabled
-    TRIG = 0  # Trigger mode disabled
-    REC = 0  # Recording disabled
-    GO = 0  # Start acquisition
+    FSAMP = 0   # 2000 Hz
+    NCH = 0     # 64 channels
+    MODE = 0    # Standard mode
+    HRES = 0    # Normal resolution
+    HPF = 0     # High-pass filter enabled
+    EXTEN = 0   # External trigger disabled
+    TRIG = 0    # Trigger mode disabled
+    REC = 0     # Recording disabled
+    GO = 0      # Start acquisition
 
     # Create command and configure device
     command = device.create_command(
