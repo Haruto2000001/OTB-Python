@@ -45,7 +45,6 @@ reshaped_data = np.array(unpacked_data).reshape((-1, self.device.nchannels)).T
 - `self.client_socket` は `SessantaquattroPlus.start_server()` 内で `self.server_socket = socket.socket(socket.AF_INET, socket.SOCK_STREAM)`として定義されており、中身は`socket.socket`である。(すでに `device.start_server()`で TCP 接続接続が開始されている) [【Python】プロセス間通信の基本(ソケット)](https://zenn.dev/shimiyu/articles/336a06c3a65f0a)
 
 - `self.device.nchannels * 2 * (self.device.frequency // 16)` は、「一度に送られてくるパケットには、チャンネル数 ×2 バイト(int16)×1/16 秒分のサンプル数」という意味である.
-
   - `nchannels`: チャンネル数
   - `2`: 1 サンプルあたり 2 バイト (`struct.unpack(..., "h")`の h は int16)
   - `frequency // 16`: 1/16 秒分のサンプル数（1 回で受け取るブロック長）
@@ -120,6 +119,10 @@ def draw(self):
 ```
 
 補足: `conv_fact` はスケーリング係数、`offset` はチャンネルごとの縦方向オフセット。
+
+## 追加機能
+
+### 1. MEPヒートマップ
 
 ## 元の説明
 
